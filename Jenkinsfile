@@ -2,8 +2,9 @@ pipeline {
   agent any
 
   environment {
-    REGISTRY = 'ghcr.io/your-org'
+    REGISTRY = 'ghcr.io/rahul09123'
     TAG = "${env.BUILD_NUMBER}"
+    TRIVY_IMAGE = 'aquasec/trivy:latest'
   }
 
   stages {
@@ -29,15 +30,17 @@ pipeline {
 
     stage('Trivy Scan') {
       steps {
-        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.53.2 image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/event-collector:$TAG'''
-        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.53.2 image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/analyzer:$TAG'''
-        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.53.2 image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/alert-manager:$TAG'''
+        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/event-collector:$TAG'''
+        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/analyzer:$TAG'''
+        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/alert-manager:$TAG'''
       }
     }
 
     stage('Push Images') {
       when {
-        expression { return env.BRANCH_NAME == 'main' }
+        expression {
+          return env.BRANCH_NAME == 'main' || env.GIT_BRANCH == 'main' || env.GIT_BRANCH == 'origin/main'
+        }
       }
       steps {
         withCredentials([usernamePassword(credentialsId: 'registry-creds', passwordVariable: 'REG_PASS', usernameVariable: 'REG_USER')]) {
