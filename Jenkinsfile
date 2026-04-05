@@ -4,7 +4,7 @@ pipeline {
   environment {
     REGISTRY = 'ghcr.io/rahul09123'
     TAG = "${env.BUILD_NUMBER}"
-    TRIVY_IMAGE = 'aquasec/trivy:latest'
+    TRIVY_VERSION = '0.51.4'
   }
 
   stages {
@@ -30,9 +30,16 @@ pipeline {
 
     stage('Trivy Scan') {
       steps {
-        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/event-collector:$TAG'''
-        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/analyzer:$TAG'''
-        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock $TRIVY_IMAGE image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/alert-manager:$TAG'''
+        sh '''
+          set -euo pipefail
+          mkdir -p "$WORKSPACE/bin"
+          if [ ! -x "$WORKSPACE/bin/trivy" ]; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$WORKSPACE/bin" v${TRIVY_VERSION}
+          fi
+          "$WORKSPACE/bin/trivy" image --severity HIGH,CRITICAL --exit-code 1 "$REGISTRY/event-collector:$TAG"
+          "$WORKSPACE/bin/trivy" image --severity HIGH,CRITICAL --exit-code 1 "$REGISTRY/analyzer:$TAG"
+          "$WORKSPACE/bin/trivy" image --severity HIGH,CRITICAL --exit-code 1 "$REGISTRY/alert-manager:$TAG"
+        '''
       }
     }
 
