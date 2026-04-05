@@ -1,0 +1,25 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test and coverage
+*.test
+coverage.out
+
+# IDE/OS
+.DS_Store
+.vscode/
+.idea/
+
+# Kubernetes local config
+.kube/
+
+# Env
+.env
+
+# Logs
+*.log
