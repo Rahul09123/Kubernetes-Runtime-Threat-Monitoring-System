@@ -1,0 +1,23 @@
+---
+- name: Setup tooling and deploy KRTMS
+  hosts: k8s_master
+  become: false
+  vars:
+    project_dir: "{{ playbook_dir }}/../.."
+  tasks:
+    - name: Ensure Homebrew packages are installed (macOS)
+      ansible.builtin.command: "brew install kubectl helm"
+      changed_when: false
+      when: ansible_system == 'Darwin'
+
+    - name: Apply base manifests
+      ansible.builtin.command: "kubectl apply -k {{ project_dir }}/deployments/k8s/base"
+      changed_when: false
+
+    - name: Apply monitoring manifests
+      ansible.builtin.command: "kubectl apply -k {{ project_dir }}/deployments/k8s/monitoring"
+      changed_when: false
+
+    - name: Display services
+      ansible.builtin.command: "kubectl get svc -n krtms"
+      changed_when: false
