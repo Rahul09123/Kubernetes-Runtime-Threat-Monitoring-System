@@ -29,9 +29,9 @@ pipeline {
 
     stage('Trivy Scan') {
       steps {
-        sh 'trivy image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/event-collector:$TAG'
-        sh 'trivy image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/analyzer:$TAG'
-        sh 'trivy image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/alert-manager:$TAG'
+        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.53.2 image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/event-collector:$TAG'''
+        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.53.2 image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/analyzer:$TAG'''
+        sh '''docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.53.2 image --severity HIGH,CRITICAL --exit-code 1 $REGISTRY/alert-manager:$TAG'''
       }
     }
 
