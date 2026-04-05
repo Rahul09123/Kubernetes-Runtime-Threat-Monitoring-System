@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-manager
+  namespace: krtms
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alert-manager
+  template:
+    metadata:
+      labels:
+        app: alert-manager
+    spec:
+      containers:
+        - name: alert-manager
+          image: ghcr.io/your-org/alert-manager:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NATS_URL
+              value: nats://nats:4222
+            - name: HTTP_ADDR
+              value: :8082
+            # Configure one or both channels:
+            # - SLACK_WEBHOOK_URL
+            # - SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_TO
+          ports:
+            - name: http
+              containerPort: 8082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-manager
+  namespace: krtms
+spec:
+  selector:
+    app: alert-manager
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
