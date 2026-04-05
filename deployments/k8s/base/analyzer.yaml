@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analyzer
+  namespace: krtms
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analyzer
+  template:
+    metadata:
+      labels:
+        app: analyzer
+    spec:
+      containers:
+        - name: analyzer
+          image: ghcr.io/your-org/analyzer:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NATS_URL
+              value: nats://nats:4222
+            - name: HTTP_ADDR
+              value: :8081
+          ports:
+            - name: http
+              containerPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analyzer
+  namespace: krtms
+spec:
+  selector:
+    app: analyzer
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
