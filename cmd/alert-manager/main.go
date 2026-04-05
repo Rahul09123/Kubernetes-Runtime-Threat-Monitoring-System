@@ -2,17 +2,53 @@ package main
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/smtp"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/rahulraman/kubernetes-runtime-threat-monitoring-system/internal/common"
 )
+
+//go:embed web/*
+var webAssets embed.FS
+
+const maxStoredAlerts = 200
+
+type alertStore struct {
+	mu     sync.RWMutex
+	alerts []common.ThreatAlert
+}
+
+func newAlertStore() *alertStore {
+	return &alertStore{alerts: make([]common.ThreatAlert, 0, maxStoredAlerts)}
+}
+
+func (s *alertStore) add(alert common.ThreatAlert) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.alerts = append([]common.ThreatAlert{alert}, s.alerts...)
+	if len(s.alerts) > maxStoredAlerts {
+		s.alerts = s.alerts[:maxStoredAlerts]
+	}
+}
+
+func (s *alertStore) list() []common.ThreatAlert {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	alerts := make([]common.ThreatAlert, len(s.alerts))
+	copy(alerts, s.alerts)
+	return alerts
+}
 
 func main() {
 	queue, err := common.NewQueue(env("NATS_URL", "nats://nats:4222"))
@@ -22,7 +58,8 @@ func main() {
 	defer queue.Close()
 
 	metrics := common.NewServiceMetrics("alert-manager")
-	go serveHTTP(env("HTTP_ADDR", ":8082"))
+	store := newAlertStore()
+	go serveHTTP(env("HTTP_ADDR", ":8082"), store)
 
 	_, err = queue.Subscribe("threats.alerts", func(payload []byte) {
 		var alert common.ThreatAlert
@@ -30,6 +67,7 @@ func main() {
 			log.Printf("decode alert failed: %v", err)
 			return
 		}
+		store.add(alert)
 		metrics.EventsProcessed.Inc()
 		metrics.AlertsRaised.WithLabelValues(alert.Severity).Inc()
 		if err := dispatch(alert); err != nil {
@@ -99,13 +137,31 @@ func sendEmail(alert common.ThreatAlert) error {
 	return smtp.SendMail(addr, auth, from, []string{to}, msg)
 }
 
-func serveHTTP(addr string) {
+func serveHTTP(addr string, store *alertStore) {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", common.MetricsHandler())
+	mux.HandleFunc("/api/alerts", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(store.list()); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("failed to encode alerts"))
+		}
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	webFS, err := fs.Sub(webAssets, "web")
+	if err != nil {
+		log.Fatalf("web assets setup failed: %v", err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(webFS)))
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("http server failed: %v", err)
 	}

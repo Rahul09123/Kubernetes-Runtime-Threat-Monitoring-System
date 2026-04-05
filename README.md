@@ -52,6 +52,8 @@ Responsibilities:
 - Subscribes to `threats.alerts` from NATS.
 - Dispatches notifications to Slack webhook and/or SMTP email.
 - Logs alerts if no notification channel is configured.
+- Stores recent alerts in-memory for dashboard visualization.
+- Serves a built-in frontend dashboard and JSON alert API.
 - Exposes health and Prometheus metrics endpoints.
 
 Why it exists:
@@ -109,6 +111,8 @@ Analyzer:
 Alert Manager:
 - `GET /healthz`
 - `GET /metrics`
+- `GET /api/alerts`
+- `GET /` (threat monitoring dashboard UI)
 
 ## Repository Structure
 
@@ -167,11 +171,18 @@ kubectl get svc -n krtms
 ```bash
 kubectl port-forward svc/prometheus 9090:9090 -n krtms
 kubectl port-forward svc/grafana 3000:3000 -n krtms
+kubectl port-forward svc/alert-manager 8082:8082 -n krtms
 ```
 
 Grafana default credentials:
 - User: `admin`
 - Password: `admin`
+
+Frontend dashboard:
+- http://localhost:8082/
+
+Recent alerts API:
+- http://localhost:8082/api/alerts
 
 ## Falco Integration
 

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KRTMS Threat Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <main class="layout">
+      <header class="hero">
+        <p class="eyebrow">Kubernetes Runtime Threat Monitoring</p>
+        <h1>Live Threat Console</h1>
+        <p class="subtitle">Real-time feed of analyzer detections delivered by alert-manager.</p>
+      </header>
+
+      <section class="cards">
+        <article class="card pulse">
+          <p class="label">Total Alerts</p>
+          <h2 id="totalCount">0</h2>
+        </article>
+        <article class="card critical">
+          <p class="label">Critical</p>
+          <h2 id="criticalCount">0</h2>
+        </article>
+        <article class="card high">
+          <p class="label">High</p>
+          <h2 id="highCount">0</h2>
+        </article>
+        <article class="card medium">
+          <p class="label">Medium</p>
+          <h2 id="mediumCount">0</h2>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Recent Alerts</h3>
+          <p id="lastUpdated">Waiting for first fetch...</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Severity</th>
+                <th>Category</th>
+                <th>Namespace</th>
+                <th>Pod</th>
+                <th>Source</th>
+                <th>Summary</th>
+                <th>Detected</th>
+              </tr>
+            </thead>
+            <tbody id="alertsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
