@@ -1,138 +1,137 @@
 # Kubernetes Runtime Threat Monitoring System (KRTMS)
 
-KRTMS is a Go-based microservices system for runtime threat monitoring in Kubernetes. It watches pod behavior, detects suspicious activity, consumes Falco runtime alerts, and notifies users through automated channels.
+KRTMS is a microservices-based runtime monitoring system for Kubernetes workloads.
+It captures pod lifecycle behavior, applies threat detection rules, ingests Falco runtime events, and routes normalized alerts to notification channels and dashboards.
 
-## What This Project Does
+This repository includes:
+- 3 Go services (`event-collector`, `analyzer`, `alert-manager`)
+- NATS as the event bus
+- Kubernetes manifests (base + monitoring)
+- Prometheus and Grafana integration
+- Jenkins CI pipeline with optional deploy + smoke validation
+- An end-to-end smoke test for production-like verification
 
-- Monitors Kubernetes pod lifecycle events in near real time.
-- Detects anomalies such as abnormal restarts and privileged workload indicators.
-- Ingests Falco runtime threat events for syscall-level security detections.
-- Sends alerts to Slack and/or Email.
-- Exposes operational metrics for Prometheus and Grafana.
-- Supports DevSecOps delivery with Jenkins + Trivy and Kubernetes deployment automation.
+Quick onboarding path:
+- See `docs/quickstart.md` for a fast Minikube setup and verification guide.
 
-## Core Services and Responsibilities
+## 1. Architecture Overview
 
-### 1) Event Collector Service
+### Components
 
-Path: `cmd/event-collector/main.go`
+1. Event Collector
+- Watches Kubernetes Pod events using `client-go` informers.
+- Publishes normalized events to NATS subject `pods.events`.
+- Exposes `/healthz` and `/metrics`.
 
-Responsibilities:
-- Connects to Kubernetes using `client-go` informers.
-- Watches pod add/update/delete events.
-- Normalizes pod events into a shared `PodEvent` model.
-- Publishes events to NATS subject `pods.events`.
-- Exposes health and Prometheus metrics endpoints.
+2. Analyzer
+- Subscribes to `pods.events`.
+- Applies built-in detection rules.
+- Ingests Falco webhook events at `POST /falco`.
+- Publishes threat alerts to NATS subject `threats.alerts`.
+- Exposes `/healthz` and `/metrics`.
 
-Why it exists:
-- Decouples raw Kubernetes activity from threat logic.
-- Provides a clean event stream for downstream processing.
+3. Alert Manager
+- Subscribes to `threats.alerts`.
+- Stores recent alerts in memory (latest 200).
+- Sends notifications via Slack and/or SMTP.
+- Serves web dashboard and `GET /api/alerts`.
+- Exposes `/healthz` and `/metrics`.
 
-### 2) Analyzer Service
+4. NATS
+- Decouples producers and consumers.
+- Provides asynchronous event flow between services.
 
-Path: `cmd/analyzer/main.go`
+5. Prometheus + Grafana
+- Prometheus scrapes metrics from all services.
+- Grafana visualizes throughput and alert trends.
 
-Responsibilities:
-- Subscribes to `pods.events` from NATS.
-- Applies threat rules (restart anomalies, privileged labels).
-- Accepts Falco webhook events via `POST /falco`.
-- Converts detections into `ThreatAlert` messages.
-- Publishes alerts to NATS subject `threats.alerts`.
-- Exposes health and Prometheus metrics endpoints.
+### Data Flow
 
-Why it exists:
-- Centralizes threat decision logic.
-- Combines Kubernetes behavior-based detection with Falco runtime findings.
+1. Kubernetes emits pod add/update/delete state changes.
+2. Event Collector converts changes into `PodEvent` objects.
+3. Event Collector publishes events to `pods.events`.
+4. Analyzer consumes pod events and applies rule checks.
+5. Analyzer ingests Falco events via webhook and normalizes to alerts.
+6. Analyzer publishes alerts to `threats.alerts`.
+7. Alert Manager consumes alerts, stores latest records, dispatches notifications.
+8. Prometheus scrapes service metrics.
+9. Grafana renders operational and security panels.
 
-### 3) Alert Manager Service
+## 2. Threat Detection Logic (Current Rules)
 
-Path: `cmd/alert-manager/main.go`
+### Pod behavior rules
 
-Responsibilities:
-- Subscribes to `threats.alerts` from NATS.
-- Dispatches notifications to Slack webhook and/or SMTP email.
-- Logs alerts if no notification channel is configured.
-- Stores recent alerts in-memory for dashboard visualization.
-- Serves a built-in frontend dashboard and JSON alert API.
-- Exposes health and Prometheus metrics endpoints.
+1. Restart anomaly
+- Trigger: event type `POD_RESTART`
+- Severity: `medium`
+- Category: `anomaly`
 
-Why it exists:
-- Separates detection from notification delivery.
-- Makes delivery channels replaceable without changing analyzer logic.
+2. Privileged label indicator
+- Trigger: pod label `security.privileged=true`
+- Severity: `high`
+- Category: `privilege-escalation`
 
-### 4) NATS Message Bus
+### Falco ingestion rule
 
-Responsibilities:
-- Provides asynchronous communication between microservices.
-- Reduces direct coupling between producer and consumer services.
+- Trigger: request to `POST /falco`
+- Category: `runtime-threat`
+- Severity: derived from Falco `priority` (lower-cased), defaults to `high` when absent
 
-Subjects used:
-- `pods.events` (Event Collector -> Analyzer)
-- `threats.alerts` (Analyzer -> Alert Manager)
+## 3. Service Endpoints
 
-### 5) Monitoring Stack
-
-Files:
-- `deployments/k8s/monitoring/prometheus.yaml`
-- `deployments/k8s/monitoring/grafana.yaml`
-
-Responsibilities:
-- Prometheus scrapes service metrics.
-- Grafana visualizes event throughput and alert rates.
-
-## End-to-End Workflow
-
-1. Kubernetes emits pod lifecycle changes.
-2. Event Collector captures and publishes normalized events.
-3. Analyzer consumes events and runs detection rules.
-4. Analyzer also ingests Falco runtime alerts through webhook.
-5. Analyzer publishes high-confidence threat alerts.
-6. Alert Manager sends Slack/Email notifications.
-7. Prometheus scrapes all service metrics.
-8. Grafana dashboards show system behavior and security signal trends.
-
-## Threat Detection Logic (Current MVP)
-
-- Pod restart increase -> medium severity anomaly alert.
-- Label `security.privileged=true` -> high severity privilege escalation alert.
-- Falco webhook event -> runtime threat alert (severity inferred from Falco priority).
-
-## API and Runtime Endpoints
-
-Event Collector:
+### Event Collector
 - `GET /healthz`
 - `GET /metrics`
 
-Analyzer:
+### Analyzer
 - `GET /healthz`
 - `GET /metrics`
 - `POST /falco`
 
-Alert Manager:
+### Alert Manager
 - `GET /healthz`
 - `GET /metrics`
 - `GET /api/alerts`
-- `GET /` (threat monitoring dashboard UI)
+- `GET /` (embedded static web UI)
 
-## Repository Structure
+## 4. Repository Layout
 
-- `cmd/` service entry points.
-- `internal/common/` shared event models, queue client, metrics helpers.
-- `deployments/docker/` Dockerfiles for each microservice.
-- `deployments/k8s/base/` runtime components and services.
-- `deployments/k8s/monitoring/` Prometheus and Grafana resources.
-- `ansible/` deployment automation playbooks.
-- `docs/` architecture notes.
+- `cmd/`
+  - `event-collector/`
+  - `analyzer/`
+  - `alert-manager/`
+- `internal/common/`
+  - Shared metrics, queue, and event/alert models
+- `deployments/docker/`
+  - Service Dockerfiles
+- `deployments/k8s/base/`
+  - Namespace, NATS, services, deployments, RBAC
+- `deployments/k8s/monitoring/`
+  - Prometheus + Grafana resources
+- `scripts/`
+  - Deployment helper and smoke test
+- `ansible/`
+  - Automation playbooks
+- `docs/`
+  - Architecture notes
+- `Jenkinsfile`
+  - CI pipeline
 
-## Local Build and Test
+## 5. Prerequisites
 
-Requirements:
-- Go 1.22+
-- Docker
-- Kubernetes cluster (kind/minikube/k3d/cloud)
-- kubectl
+Minimum recommended toolchain:
 
-Commands:
+1. Go 1.22+
+2. Docker
+3. Kubernetes cluster (Minikube, Kind, K3d, or cloud)
+4. kubectl
+5. make
+
+Optional:
+- Falco / Falco Sidekick for runtime syscall alerts
+- Jenkins for CI automation
+
+## 6. Local Build and Test
 
 ```bash
 make tidy
@@ -140,27 +139,226 @@ make test
 make build
 ```
 
-## Container Build
+## 7. Build Container Images
+
+### Generic registry flow
 
 ```bash
 REGISTRY=ghcr.io/<your-org> TAG=latest make docker
 ```
 
-## Kubernetes Deployment
+### Minikube local-image flow
 
-1. Update image names in:
-- `deployments/k8s/base/event-collector.yaml`
-- `deployments/k8s/base/analyzer.yaml`
-- `deployments/k8s/base/alert-manager.yaml`
+If you are deploying to Minikube and do not want to push images to a remote registry:
 
-2. Deploy base + monitoring:
+```bash
+eval $(minikube docker-env)
+make docker
+```
+
+This builds images directly into the Minikube Docker daemon so Kubernetes can pull them locally.
+
+## 8. Kubernetes Deployment
+
+### Deploy all components
 
 ```bash
 make deploy
 ```
 
-Minikube note:
-- Build images inside Minikube's Docker daemon before deploy:
+`make deploy` applies Kustomize overlays for:
+- `deployments/k8s/base`
+- `deployments/k8s/monitoring`
+
+### Validate rollout
+
+```bash
+kubectl get pods -n krtms
+kubectl get deploy -n krtms
+kubectl get svc -n krtms
+```
+
+### Important RBAC detail
+
+Event Collector requires pod watch permissions cluster-wide.
+This repository includes:
+- ServiceAccount `event-collector-sa`
+- ClusterRole for `pods` with `get/list/watch`
+- ClusterRoleBinding from service account to role
+
+## 9. Observability and Dashboards
+
+### Prometheus
+
+Port-forward:
+
+```bash
+kubectl port-forward svc/prometheus 9090:9090 -n krtms
+```
+
+Open: `http://localhost:9090/targets`
+
+Expected targets: `event-collector:8080`, `analyzer:8081`, `alert-manager:8082`
+
+### Grafana
+
+Port-forward:
+
+```bash
+kubectl port-forward svc/grafana 3000:3000 -n krtms
+```
+
+Open: `http://localhost:3000`
+
+Default credentials:
+- Username: `admin`
+- Password: `admin`
+
+Provisioning included:
+- Prometheus datasource
+- Dashboard provider (`KRTMS` folder)
+- KRTMS dashboard panels for events and alerts
+
+If dashboard changes do not appear:
+
+```bash
+kubectl apply -k deployments/k8s/monitoring
+kubectl rollout restart deploy/grafana -n krtms
+```
+
+### Alert Manager UI/API
+
+Port-forward:
+
+```bash
+kubectl port-forward svc/alert-manager 8082:8082 -n krtms
+```
+
+- Web UI: `http://localhost:8082/`
+- Alert API: `http://localhost:8082/api/alerts`
+
+## 10. Alert Delivery Configuration
+
+Alert Manager sends notifications to Slack and/or Email when configured.
+
+### Slack
+
+Environment variable:
+- `SLACK_WEBHOOK_URL`
+
+### Email (SMTP)
+
+Environment variables:
+- `SMTP_HOST`
+- `SMTP_PORT` (default 587)
+- `SMTP_USER`
+- `SMTP_PASS`
+- `SMTP_FROM` (optional, defaults to `SMTP_USER`)
+- `SMTP_TO`
+
+If neither Slack nor SMTP is configured, alerts are still processed and logged.
+
+## 11. Falco Integration
+
+Analyzer accepts Falco webhook payloads at:
+- `POST http://analyzer:8081/falco`
+
+Typical integration path:
+1. Falco detects runtime syscall events.
+2. Falco Sidekick forwards webhook payloads to Analyzer.
+3. Analyzer converts event to `ThreatAlert` and publishes to `threats.alerts`.
+4. Alert Manager stores and dispatches.
+
+## 12. Smoke Test (End-to-End Validation)
+
+A complete pipeline check is included:
+
+```bash
+make smoke
+```
+
+What it does:
+1. Creates a temporary pod in the target namespace with label `security.privileged=true`.
+2. Waits for pod readiness.
+3. Queries `alert-manager` API from inside cluster.
+4. Verifies an alert exists for the generated pod name.
+5. Cleans up test pod automatically.
+
+Environment override:
+- `NAMESPACE=<namespace> make smoke`
+
+## 13. CI/CD (Jenkins)
+
+Pipeline stages:
+1. Checkout
+2. Go Test
+3. Build Images
+4. Trivy Scan (HIGH/CRITICAL fail the build)
+5. Push Images (main branch)
+6. Deploy to Kubernetes (optional)
+7. Smoke Test (optional, after deploy)
+
+### Jenkins control flags
+
+- `RUN_DEPLOY=true|false`
+- `RUN_SMOKE_TEST=true|false`
+- `K8S_NAMESPACE=<namespace>`
+
+Behavior:
+- Deploy stage runs only on `main` and only when `RUN_DEPLOY=true`.
+- Smoke stage runs only on `main` and only when both `RUN_DEPLOY=true` and `RUN_SMOKE_TEST=true`.
+
+## 14. Troubleshooting Guide
+
+### A. Pods are running but no alerts appear
+
+Checklist:
+1. Verify NATS is healthy:
+```bash
+kubectl get pods -n krtms
+```
+2. Check service logs:
+```bash
+kubectl logs deploy/event-collector -n krtms --tail=100
+kubectl logs deploy/analyzer -n krtms --tail=100
+kubectl logs deploy/alert-manager -n krtms --tail=100
+```
+3. Run smoke test:
+```bash
+make smoke
+```
+
+### B. Grafana opens but dashboard is missing
+
+1. Reapply monitoring manifests:
+```bash
+kubectl apply -k deployments/k8s/monitoring
+```
+2. Restart Grafana:
+```bash
+kubectl rollout restart deploy/grafana -n krtms
+```
+
+### C. Metrics targets are down in Prometheus
+
+1. Confirm services exist:
+```bash
+kubectl get svc -n krtms
+```
+2. Confirm corresponding pods are ready:
+```bash
+kubectl get pods -n krtms
+```
+3. Open `http://localhost:9090/targets` and inspect error messages for each target.
+
+### D. Event Collector cannot watch pods
+
+- Ensure RBAC resources are applied from `deployments/k8s/base`.
+- Verify deployment uses service account `event-collector-sa`.
+
+### E. Minikube cannot find images
+
+Use Minikube Docker daemon before building:
 
 ```bash
 eval $(minikube docker-env)
@@ -168,88 +366,56 @@ make docker
 make deploy
 ```
 
-3. Validate:
+## 15. Security Notes
+
+1. Default Grafana admin password is `admin`; change in production.
+2. SMTP and Slack secrets should be managed with Kubernetes Secrets, not plain manifests.
+3. Add network policies and stricter RBAC for production hardening.
+4. Enable image signing and policy enforcement if required by your platform.
+
+## 16. Operational Recommendations
+
+1. Add persistent storage for alert history if long-term retention is required.
+2. Add readiness/liveness probes for stronger self-healing behavior.
+3. Add namespace/cluster filters if event volume is high.
+4. Add load and chaos tests for resiliency validation.
+
+## 17. Useful Commands Cheat Sheet
+
+### Build and deploy (Minikube)
+
+```bash
+eval $(minikube docker-env)
+make docker
+make deploy
+```
+
+### Health checks
 
 ```bash
 kubectl get pods -n krtms
+kubectl get deploy -n krtms
 kubectl get svc -n krtms
 ```
 
-## Dashboard Access
+### Logs
 
 ```bash
-kubectl port-forward svc/prometheus 9090:9090 -n krtms
-kubectl port-forward svc/grafana 3000:3000 -n krtms
-kubectl port-forward svc/alert-manager 8082:8082 -n krtms
+kubectl logs deploy/event-collector -n krtms --tail=100
+kubectl logs deploy/analyzer -n krtms --tail=100
+kubectl logs deploy/alert-manager -n krtms --tail=100
 ```
 
-Grafana default credentials:
-- User: `admin`
-- Password: `admin`
-
-If dashboards do not appear after changes, refresh Grafana provisioning:
-
-```bash
-kubectl apply -k deployments/k8s/monitoring
-kubectl rollout restart deploy/grafana -n krtms
-```
-
-Frontend dashboard:
-- http://localhost:8082/
-
-Recent alerts API:
-- http://localhost:8082/api/alerts
-
-## Smoke Test (End-to-End Pipeline)
-
-Run a quick pipeline health check that creates a labeled test pod and verifies an alert appears in Alert Manager:
+### Smoke test
 
 ```bash
 make smoke
 ```
 
-The script is in `scripts/smoke-test.sh` and cleans up its temporary test pod automatically.
+---
 
-## Falco Integration
-
-Analyzer accepts Falco webhook payloads at:
-- `POST http://analyzer:8081/falco`
-
-Use Falco Sidekick or webhook forwarding to route Falco events to this endpoint.
-
-## Alert Channel Configuration
-
-Set environment variables in Alert Manager deployment:
-
-Slack:
-- `SLACK_WEBHOOK_URL`
-
-Email:
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USER`
-- `SMTP_PASS`
-- `SMTP_FROM`
-- `SMTP_TO`
-
-## DevSecOps CI/CD (Jenkins + Trivy)
-
-`Jenkinsfile` pipeline stages:
-- Checkout source.
-- Run Go tests.
-- Build service images.
-- Scan images with Trivy (fail on HIGH/CRITICAL).
-- Push images on `main` branch.
-
-## Automated Setup (Ansible)
-
-```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/setup_and_deploy.yml
-```
-
-## Future Improvements
-
-- Add richer rule engine and baseline profiling.
-- Add persistence for alert history.
-- Add RBAC hardening for service accounts.
-- Add integration tests and synthetic attack simulation.
+If you are onboarding a new contributor, the fastest validation path is:
+1. Build images in Minikube.
+2. Run `make deploy`.
+3. Run `make smoke`.
+4. Open Grafana and Alert Manager API.
