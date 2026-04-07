@@ -4,6 +4,7 @@ namespace: krtms
 resources:
   - namespace.yaml
   - nats.yaml
+  - rbac-event-collector.yaml
   - event-collector.yaml
   - analyzer.yaml
   - alert-manager.yaml

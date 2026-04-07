@@ -13,7 +13,7 @@ spec:
       labels:
         app: event-collector
     spec:
-      serviceAccountName: default
+      serviceAccountName: event-collector-sa
       containers:
         - name: event-collector
           image: ghcr.io/your-org/event-collector:latest
