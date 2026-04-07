@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/nats-io/nats.go"
 )
@@ -34,7 +35,13 @@ func (q *Queue) Publish(ctx context.Context, subject string, payload any) error 
 	if err := q.conn.Publish(subject, b); err != nil {
 		return fmt.Errorf("publish: %w", err)
 	}
-	if err := q.conn.FlushWithContext(ctx); err != nil {
+	flushCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		flushCtx, cancel = context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+	}
+	if err := q.conn.FlushWithContext(flushCtx); err != nil {
 		return fmt.Errorf("flush publish: %w", err)
 	}
 	return nil
