@@ -159,6 +159,15 @@ REGISTRY=ghcr.io/<your-org> TAG=latest make docker
 make deploy
 ```
 
+Minikube note:
+- Build images inside Minikube's Docker daemon before deploy:
+
+```bash
+eval $(minikube docker-env)
+make docker
+make deploy
+```
+
 3. Validate:
 
 ```bash
@@ -178,11 +187,28 @@ Grafana default credentials:
 - User: `admin`
 - Password: `admin`
 
+If dashboards do not appear after changes, refresh Grafana provisioning:
+
+```bash
+kubectl apply -k deployments/k8s/monitoring
+kubectl rollout restart deploy/grafana -n krtms
+```
+
 Frontend dashboard:
 - http://localhost:8082/
 
 Recent alerts API:
 - http://localhost:8082/api/alerts
+
+## Smoke Test (End-to-End Pipeline)
+
+Run a quick pipeline health check that creates a labeled test pod and verifies an alert appears in Alert Manager:
+
+```bash
+make smoke
+```
+
+The script is in `scripts/smoke-test.sh` and cleans up its temporary test pod automatically.
 
 ## Falco Integration
 

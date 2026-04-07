@@ -2,7 +2,7 @@ APP ?= krtms
 REGISTRY ?= ghcr.io/your-org
 TAG ?= latest
 
-.PHONY: tidy test build docker deploy
+.PHONY: tidy test build docker deploy smoke
 
 tidy:
 	go mod tidy
@@ -19,5 +19,8 @@ docker:
 	docker build -f deployments/docker/Dockerfile.alert-manager -t $(REGISTRY)/alert-manager:$(TAG) .
 
 deploy:
-	kubectl apply -f deployments/k8s/base
-	kubectl apply -f deployments/k8s/monitoring
+	kubectl apply -k deployments/k8s/base
+	kubectl apply -k deployments/k8s/monitoring
+
+smoke:
+	bash scripts/smoke-test.sh

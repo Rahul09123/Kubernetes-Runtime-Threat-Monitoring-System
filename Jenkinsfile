@@ -5,6 +5,9 @@ pipeline {
     REGISTRY = 'ghcr.io/rahul09123'
     TAG = "${env.BUILD_NUMBER}"
     TRIVY_IMAGE = 'ghcr.io/aquasecurity/trivy:0.51.4'
+    RUN_DEPLOY = "${env.RUN_DEPLOY ?: 'false'}"
+    RUN_SMOKE_TEST = "${env.RUN_SMOKE_TEST ?: 'false'}"
+    K8S_NAMESPACE = "${env.K8S_NAMESPACE ?: 'krtms'}"
   }
 
   stages {
@@ -52,6 +55,39 @@ pipeline {
           sh 'docker push $REGISTRY/analyzer:$TAG'
           sh 'docker push $REGISTRY/alert-manager:$TAG'
         }
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      when {
+        expression {
+          return (env.BRANCH_NAME == 'main' || env.GIT_BRANCH == 'main' || env.GIT_BRANCH == 'origin/main') && env.RUN_DEPLOY?.toBoolean()
+        }
+      }
+      steps {
+        sh '''
+          set -euo pipefail
+          kubectl apply -k deployments/k8s/base
+          kubectl apply -k deployments/k8s/monitoring
+          kubectl rollout status deploy/event-collector -n "$K8S_NAMESPACE"
+          kubectl rollout status deploy/analyzer -n "$K8S_NAMESPACE"
+          kubectl rollout status deploy/alert-manager -n "$K8S_NAMESPACE"
+        '''
+      }
+    }
+
+    stage('Smoke Test') {
+      when {
+        expression {
+          return (env.BRANCH_NAME == 'main' || env.GIT_BRANCH == 'main' || env.GIT_BRANCH == 'origin/main') && env.RUN_DEPLOY?.toBoolean() && env.RUN_SMOKE_TEST?.toBoolean()
+        }
+      }
+      steps {
+        sh '''
+          set -euo pipefail
+          kubectl version --client
+          NAMESPACE="$K8S_NAMESPACE" make smoke
+        '''
       }
     }
   }
