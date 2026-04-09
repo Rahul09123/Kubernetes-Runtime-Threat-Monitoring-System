@@ -64,18 +64,21 @@ pipeline {
         }
       }
       steps {
-        sh '''
-          set -euo pipefail
-          kubectl apply -k deployments/k8s/base
-          kubectl apply -k deployments/k8s/monitoring
-          kubectl set image -n "$K8S_NAMESPACE" deploy/event-collector event-collector="$REGISTRY/event-collector:$TAG"
-          kubectl set image -n "$K8S_NAMESPACE" deploy/analyzer analyzer="$REGISTRY/analyzer:$TAG"
-          kubectl set image -n "$K8S_NAMESPACE" deploy/alert-manager alert-manager="$REGISTRY/alert-manager:$TAG"
-          kubectl rollout status deploy/event-collector -n "$K8S_NAMESPACE" --timeout=180s
-          kubectl rollout status deploy/analyzer -n "$K8S_NAMESPACE" --timeout=180s
-          kubectl rollout status deploy/alert-manager -n "$K8S_NAMESPACE" --timeout=180s
-          kubectl rollout status deploy/prometheus -n "$K8S_NAMESPACE" --timeout=180s
-        '''
+        withCredentials([file(credentialsId: 'k8s-kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+          sh '''
+            set -euo pipefail
+            export KUBECONFIG="$KUBECONFIG_FILE"
+            kubectl apply -k deployments/k8s/base
+            kubectl apply -k deployments/k8s/monitoring
+            kubectl set image -n "$K8S_NAMESPACE" deploy/event-collector event-collector="$REGISTRY/event-collector:$TAG"
+            kubectl set image -n "$K8S_NAMESPACE" deploy/analyzer analyzer="$REGISTRY/analyzer:$TAG"
+            kubectl set image -n "$K8S_NAMESPACE" deploy/alert-manager alert-manager="$REGISTRY/alert-manager:$TAG"
+            kubectl rollout status deploy/event-collector -n "$K8S_NAMESPACE" --timeout=180s
+            kubectl rollout status deploy/analyzer -n "$K8S_NAMESPACE" --timeout=180s
+            kubectl rollout status deploy/alert-manager -n "$K8S_NAMESPACE" --timeout=180s
+            kubectl rollout status deploy/prometheus -n "$K8S_NAMESPACE" --timeout=180s
+          '''
+        }
       }
     }
 
@@ -86,11 +89,14 @@ pipeline {
         }
       }
       steps {
-        sh '''
-          set -euo pipefail
-          kubectl version --client
-          NAMESPACE="$K8S_NAMESPACE" make smoke
-        '''
+        withCredentials([file(credentialsId: 'k8s-kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+          sh '''
+            set -euo pipefail
+            export KUBECONFIG="$KUBECONFIG_FILE"
+            kubectl version --client
+            NAMESPACE="$K8S_NAMESPACE" make smoke
+          '''
+        }
       }
     }
   }
