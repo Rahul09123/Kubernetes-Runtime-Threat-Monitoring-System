@@ -78,18 +78,43 @@ jobs:
     needs: build-and-push
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      RENDER_NATS_DEPLOY_HOOK_URL: ${{ secrets.RENDER_NATS_DEPLOY_HOOK_URL }}
+      RENDER_EVENT_COLLECTOR_DEPLOY_HOOK_URL: ${{ secrets.RENDER_EVENT_COLLECTOR_DEPLOY_HOOK_URL }}
+      RENDER_ANALYZER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_ANALYZER_DEPLOY_HOOK_URL }}
+      RENDER_ALERT_MANAGER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_ALERT_MANAGER_DEPLOY_HOOK_URL }}
+      RENDER_PROMETHEUS_DEPLOY_HOOK_URL: ${{ secrets.RENDER_PROMETHEUS_DEPLOY_HOOK_URL }}
     steps:
+      - name: Validate Render deploy hooks
+        run: |
+          set -euo pipefail
+          missing=0
+          for key in \
+            RENDER_NATS_DEPLOY_HOOK_URL \
+            RENDER_EVENT_COLLECTOR_DEPLOY_HOOK_URL \
+            RENDER_ANALYZER_DEPLOY_HOOK_URL \
+            RENDER_ALERT_MANAGER_DEPLOY_HOOK_URL \
+            RENDER_PROMETHEUS_DEPLOY_HOOK_URL; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required GitHub secret: $key"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Deploy NATS on Render
-        run: curl -fsS -X POST "${{ secrets.RENDER_NATS_DEPLOY_HOOK_URL }}"
+        run: curl -fsS -X POST "$RENDER_NATS_DEPLOY_HOOK_URL"
 
       - name: Deploy event-collector on Render
-        run: curl -fsS -X POST "${{ secrets.RENDER_EVENT_COLLECTOR_DEPLOY_HOOK_URL }}"
+        run: curl -fsS -X POST "$RENDER_EVENT_COLLECTOR_DEPLOY_HOOK_URL"
 
       - name: Deploy analyzer on Render
-        run: curl -fsS -X POST "${{ secrets.RENDER_ANALYZER_DEPLOY_HOOK_URL }}"
+        run: curl -fsS -X POST "$RENDER_ANALYZER_DEPLOY_HOOK_URL"
 
       - name: Deploy alert-manager on Render
-        run: curl -fsS -X POST "${{ secrets.RENDER_ALERT_MANAGER_DEPLOY_HOOK_URL }}"
+        run: curl -fsS -X POST "$RENDER_ALERT_MANAGER_DEPLOY_HOOK_URL"
 
       - name: Deploy prometheus on Render
-        run: curl -fsS -X POST "${{ secrets.RENDER_PROMETHEUS_DEPLOY_HOOK_URL }}"
+        run: curl -fsS -X POST "$RENDER_PROMETHEUS_DEPLOY_HOOK_URL"
