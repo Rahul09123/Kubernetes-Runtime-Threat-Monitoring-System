@@ -8,9 +8,8 @@ services:
 
   - type: web
     name: event-collector
-    runtime: image
-    image:
-      url: ghcr.io/rahul09123/event-collector:latest
+    runtime: docker
+    dockerfilePath: deployments/docker/Dockerfile.event-collector
     plan: free
     healthCheckPath: /healthz
     envVars:
@@ -21,9 +20,8 @@ services:
 
   - type: web
     name: analyzer
-    runtime: image
-    image:
-      url: ghcr.io/rahul09123/analyzer:latest
+    runtime: docker
+    dockerfilePath: deployments/docker/Dockerfile.analyzer
     plan: free
     healthCheckPath: /healthz
     envVars:
@@ -34,9 +32,8 @@ services:
 
   - type: web
     name: alert-manager
-    runtime: image
-    image:
-      url: ghcr.io/rahul09123/alert-manager:latest
+    runtime: docker
+    dockerfilePath: deployments/docker/Dockerfile.alert-manager
     plan: free
     healthCheckPath: /healthz
     envVars:
