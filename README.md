@@ -8,7 +8,7 @@ This repository includes:
 - NATS as the event bus
 - Kubernetes manifests (base + monitoring)
 - Prometheus metrics and alert-manager UI integration
-- Jenkins CI pipeline with optional deploy + smoke validation
+- GitHub Actions CI/CD pipeline with automatic build, scan, and deploy
 - An end-to-end smoke test for production-like verification
 
 Quick onboarding path:
@@ -114,8 +114,8 @@ Quick onboarding path:
   - Automation playbooks
 - `docs/`
   - Architecture notes
-- `Jenkinsfile`
-  - CI pipeline
+- `.github/workflows/`
+  - GitHub Actions CI/CD pipeline
 
 ## 5. Prerequisites
 
@@ -129,7 +129,6 @@ Minimum recommended toolchain:
 
 Optional:
 - Falco / Falco Sidekick for runtime syscall alerts
-- Jenkins for CI automation
 
 ## 6. Local Build and Test
 
@@ -261,26 +260,29 @@ What it does:
 Environment override:
 - `NAMESPACE=<namespace> make smoke`
 
-## 13. CI/CD (Jenkins)
+## 13. CI/CD (GitHub Actions)
+
+The `.github/workflows/build-deploy.yml` workflow runs automatically on every push to `main` and PR.
 
 Pipeline stages:
-1. Checkout
-2. Go Test
-3. Build Images
-4. Trivy Scan (HIGH/CRITICAL fail the build)
-5. Push Images (main branch)
-6. Deploy to Kubernetes (optional)
-7. Smoke Test (optional, after deploy)
+1. **Test** - Runs Go tests
+2. **Build Images** - Builds three Docker images
+3. **Scan Images** - Security scan with Trivy (HIGH/CRITICAL fail the build)
+4. **Push Images** - Pushes to GHCR (main branch only)
+5. **Deploy to Kubernetes** - Applies manifests and updates deployments (main branch only)
+6. **Smoke Test** - Verifies deployment health (main branch only)
 
-### Jenkins control flags
+### GitHub Actions secrets (required)
 
-- `RUN_DEPLOY=true|false`
-- `RUN_SMOKE_TEST=true|false`
-- `K8S_NAMESPACE=<namespace>`
+- `GITHUB_TOKEN` - Automatic, used for GHCR authentication
+- `K8S_KUBECONFIG` - Base64-encoded kubeconfig for cluster access
+
+See [docs/github-actions-setup.md](docs/github-actions-setup.md) for detailed configuration.
 
 Behavior:
-- Deploy stage runs only on `main` and only when `RUN_DEPLOY=true`.
-- Smoke stage runs only on `main` and only when both `RUN_DEPLOY=true` and `RUN_SMOKE_TEST=true`.
+- All stages run on every push and PR
+- Push and Deploy stages are skipped for PRs
+- Deploy and Smoke Test stages run only on `main` branch
 
 ## 14. Troubleshooting Guide
 
