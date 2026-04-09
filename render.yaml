@@ -1,0 +1,71 @@
+services:
+  - type: web
+    name: nats
+    image: nats:2.10-alpine
+    port: 4222
+    plan: free
+    startCommand: nats-server -js
+    healthCheckPath: null
+
+  - type: web
+    name: event-collector
+    image: ghcr.io/rahul09123/event-collector
+    port: 8080
+    plan: free
+    environmentSlug: event-collector
+    healthCheckPath: /healthz
+    envVars:
+      - key: NATS_URL
+        value: nats://nats:4222
+      - key: HTTP_ADDR
+        value: :8080
+
+  - type: web
+    name: analyzer
+    image: ghcr.io/rahul09123/analyzer
+    port: 8081
+    plan: free
+    environmentSlug: analyzer
+    healthCheckPath: /healthz
+    envVars:
+      - key: NATS_URL
+        value: nats://nats:4222
+      - key: HTTP_ADDR
+        value: :8081
+
+  - type: web
+    name: alert-manager
+    image: ghcr.io/rahul09123/alert-manager
+    port: 8082
+    plan: free
+    environmentSlug: alert-manager
+    healthCheckPath: /healthz
+    envVars:
+      - key: NATS_URL
+        value: nats://nats:4222
+      - key: HTTP_ADDR
+        value: :8082
+    domain: your-krtms-monitoring.onrender.com
+
+  - type: web
+    name: prometheus
+    image: prom/prometheus:v2.54.1
+    port: 9090
+    plan: free
+    environmentSlug: prometheus
+    startCommand: prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
+    envVars:
+      - key: PROMETHEUS_CONFIG
+        value: |
+          global:
+            scrape_interval: 15s
+          scrape_configs:
+            - job_name: event-collector
+              static_configs:
+                - targets: ["event-collector:8080"]
+            - job_name: analyzer
+              static_configs:
+                - targets: ["analyzer:8081"]
+            - job_name: alert-manager
+              static_configs:
+                - targets: ["alert-manager:8082"]
