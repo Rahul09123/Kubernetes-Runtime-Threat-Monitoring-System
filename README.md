@@ -7,7 +7,7 @@ This repository includes:
 - 3 Go services (`event-collector`, `analyzer`, `alert-manager`)
 - NATS as the event bus
 - Kubernetes manifests (base + monitoring)
-- Prometheus and Grafana integration
+- Prometheus metrics and alert-manager UI integration
 - Jenkins CI pipeline with optional deploy + smoke validation
 - An end-to-end smoke test for production-like verification
 
@@ -41,9 +41,9 @@ Quick onboarding path:
 - Decouples producers and consumers.
 - Provides asynchronous event flow between services.
 
-5. Prometheus + Grafana
+5. Prometheus + Alert Manager UI
 - Prometheus scrapes metrics from all services.
-- Grafana visualizes throughput and alert trends.
+- Alert Manager UI visualizes recent alerts and summary cards.
 
 ### Data Flow
 
@@ -55,7 +55,7 @@ Quick onboarding path:
 6. Analyzer publishes alerts to `threats.alerts`.
 7. Alert Manager consumes alerts, stores latest records, dispatches notifications.
 8. Prometheus scrapes service metrics.
-9. Grafana renders operational and security panels.
+9. Alert Manager UI renders operational and security panels.
 
 ## 2. Threat Detection Logic (Current Rules)
 
@@ -107,7 +107,7 @@ Quick onboarding path:
 - `deployments/k8s/base/`
   - Namespace, NATS, services, deployments, RBAC
 - `deployments/k8s/monitoring/`
-  - Prometheus + Grafana resources
+  - Prometheus resources and alert-manager frontend
 - `scripts/`
   - Deployment helper and smoke test
 - `ansible/`
@@ -199,32 +199,6 @@ kubectl port-forward svc/prometheus 9090:9090 -n krtms
 Open: `http://localhost:9090/targets`
 
 Expected targets: `event-collector:8080`, `analyzer:8081`, `alert-manager:8082`
-
-### Grafana
-
-Port-forward:
-
-```bash
-kubectl port-forward svc/grafana 3000:3000 -n krtms
-```
-
-Open: `http://localhost:3000`
-
-Default credentials:
-- Username: `admin`
-- Password: `admin`
-
-Provisioning included:
-- Prometheus datasource
-- Dashboard provider (`KRTMS` folder)
-- KRTMS dashboard panels for events and alerts
-
-If dashboard changes do not appear:
-
-```bash
-kubectl apply -k deployments/k8s/monitoring
-kubectl rollout restart deploy/grafana -n krtms
-```
 
 ### Alert Manager UI/API
 
@@ -328,15 +302,15 @@ kubectl logs deploy/alert-manager -n krtms --tail=100
 make smoke
 ```
 
-### B. Grafana opens but dashboard is missing
+### B. Alert Manager UI is not showing alerts
 
 1. Reapply monitoring manifests:
 ```bash
 kubectl apply -k deployments/k8s/monitoring
 ```
-2. Restart Grafana:
+2. Restart alert-manager:
 ```bash
-kubectl rollout restart deploy/grafana -n krtms
+kubectl rollout restart deploy/alert-manager -n krtms
 ```
 
 ### C. Metrics targets are down in Prometheus
@@ -361,14 +335,12 @@ kubectl get pods -n krtms
 Use Minikube Docker daemon before building:
 
 ```bash
-eval $(minikube docker-env)
-make docker
 make deploy
 ```
 
 ## 15. Security Notes
 
-1. Default Grafana admin password is `admin`; change in production.
+1. The alert-manager UI has no default password, but production should still protect access through cluster/network controls.
 2. SMTP and Slack secrets should be managed with Kubernetes Secrets, not plain manifests.
 3. Add network policies and stricter RBAC for production hardening.
 4. Enable image signing and policy enforcement if required by your platform.
@@ -418,4 +390,5 @@ If you are onboarding a new contributor, the fastest validation path is:
 1. Build images in Minikube.
 2. Run `make deploy`.
 3. Run `make smoke`.
-4. Open Grafana and Alert Manager API.
+4. Open Alert Manager UI and API.
+3. Run `make smoke`.

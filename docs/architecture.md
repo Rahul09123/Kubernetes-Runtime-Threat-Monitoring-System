@@ -8,7 +8,7 @@
 5. Analyzer publishes threat alerts into NATS (`threats.alerts`).
 6. Alert Manager consumes threat alerts and dispatches notifications to Slack/Email.
 7. All services expose Prometheus metrics.
-8. Grafana visualizes metrics from Prometheus.
+8. The Alert Manager UI shows recent alerts and summary data.
 
 ## Threat Detection Logic (MVP)
 - High restart count spikes -> anomaly alert.

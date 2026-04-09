@@ -9,7 +9,7 @@ In about 5-10 minutes you will:
 2. Deploy KRTMS services and monitoring stack.
 3. Verify all workloads are healthy.
 4. Run an end-to-end smoke test.
-5. Open Grafana and Alert Manager.
+5. Open Alert Manager UI and Prometheus.
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ make deploy
 
 This applies:
 - Base runtime resources (namespace, NATS, app services, RBAC)
-- Monitoring resources (Prometheus, Grafana)
+- Monitoring resources (Prometheus)
 
 ## Step 4: Confirm Everything Is Running
 
@@ -77,20 +77,14 @@ What smoke test validates:
 Use separate terminals:
 
 ```bash
-kubectl port-forward svc/grafana 3000:3000 -n krtms
 kubectl port-forward svc/prometheus 9090:9090 -n krtms
 kubectl port-forward svc/alert-manager 8082:8082 -n krtms
 ```
 
 Access:
-- Grafana: http://localhost:3000
 - Prometheus: http://localhost:9090/targets
 - Alert Manager UI: http://localhost:8082/
 - Alert API: http://localhost:8082/api/alerts
-
-Grafana login:
-- Username: admin
-- Password: admin
 
 ## Troubleshooting
 
@@ -102,11 +96,10 @@ make docker
 make deploy
 ```
 
-### Grafana opens but dashboard missing
+### Alert Manager UI is empty
 
 ```bash
-kubectl apply -k deployments/k8s/monitoring
-kubectl rollout restart deploy/grafana -n krtms
+make smoke
 ```
 
 ### Verify service logs
