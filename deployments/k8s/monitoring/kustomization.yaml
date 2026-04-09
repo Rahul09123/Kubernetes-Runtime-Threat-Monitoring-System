@@ -3,4 +3,3 @@ kind: Kustomization
 namespace: krtms
 resources:
   - prometheus.yaml
-  - grafana.yaml
