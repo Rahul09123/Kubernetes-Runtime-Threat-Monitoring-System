@@ -151,6 +151,12 @@ jobs:
           mkdir -p $HOME/.kube
           echo "$KUBECONFIG_DATA" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
+          echo "KUBECONFIG=$HOME/.kube/config" >> "$GITHUB_ENV"
+
+      - name: Validate kubeconfig
+        run: |
+          kubectl config current-context
+          kubectl config view --minify
 
       - name: Apply base manifests
         run: kubectl apply -k deployments/k8s/base
@@ -207,6 +213,12 @@ jobs:
           mkdir -p $HOME/.kube
           echo "$KUBECONFIG_DATA" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
+          echo "KUBECONFIG=$HOME/.kube/config" >> "$GITHUB_ENV"
+
+      - name: Validate kubeconfig
+        run: |
+          kubectl config current-context
+          kubectl config view --minify
 
       - name: Check kubectl version
         run: kubectl version --client
