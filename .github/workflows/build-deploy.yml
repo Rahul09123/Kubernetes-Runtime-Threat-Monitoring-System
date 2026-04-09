@@ -8,6 +8,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: ghcr.io/rahul09123
   TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.51.4
@@ -114,8 +118,11 @@ jobs:
             -t ${{ env.REGISTRY }}/alert-manager:${{ github.run_number }} .
 
       - name: Log in to GitHub Container Registry
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Push event-collector image
         run: docker push ${{ env.REGISTRY }}/event-collector:${{ github.run_number }}
