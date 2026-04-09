@@ -1,9 +1,16 @@
 const alertsBody = document.getElementById("alertsBody");
+const apiStatus = document.getElementById("apiStatus");
 const lastUpdated = document.getElementById("lastUpdated");
+const latestAlert = document.getElementById("latestAlert");
+const latestAlertTitle = document.getElementById("latestAlertTitle");
+const latestAlertDetails = document.getElementById("latestAlertDetails");
 const totalCount = document.getElementById("totalCount");
 const criticalCount = document.getElementById("criticalCount");
 const highCount = document.getElementById("highCount");
 const mediumCount = document.getElementById("mediumCount");
+const namespaceCount = document.getElementById("namespaceCount");
+const categoryCount = document.getElementById("categoryCount");
+const podCount = document.getElementById("podCount");
 
 function severityClass(severity) {
   const value = String(severity || "low").toLowerCase();
@@ -18,6 +25,25 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+function mostCommon(values) {
+  const counts = new Map();
+  values.forEach((value) => {
+    if (!value) return;
+    counts.set(value, (counts.get(value) || 0) + 1);
+  });
+
+  let winner = "-";
+  let max = 0;
+  counts.forEach((count, value) => {
+    if (count > max) {
+      winner = value;
+      max = count;
+    }
+  });
+
+  return { value: winner, count: max };
 }
 
 function renderAlerts(alerts) {
@@ -64,20 +90,53 @@ function renderCounters(alerts) {
   mediumCount.textContent = String(counts.medium);
 }
 
-async function loadAlerts() {
+function renderSnapshot(alerts) {
+  const namespaces = mostCommon(alerts.map((alert) => alert.namespace));
+  const categories = mostCommon(alerts.map((alert) => alert.category));
+  const pods = mostCommon(alerts.map((alert) => alert.pod));
+  const latest = alerts[0];
+
+  namespaceCount.textContent = namespaces.count ? `${namespaces.value} (${namespaces.count})` : "-";
+  categoryCount.textContent = categories.count ? `${categories.value} (${categories.count})` : "-";
+  podCount.textContent = pods.count ? `${pods.value} (${pods.count})` : "-";
+
+  if (latest) {
+    latestAlert.textContent = `Latest alert: ${latest.severity || "low"}`;
+    latestAlertTitle.textContent = latest.summary || "Untitled alert";
+    latestAlertDetails.textContent = `${latest.severity || "low"} / ${latest.category || "unknown"} / ${latest.namespace || "-"} / ${latest.pod || "-"} / ${formatDate(latest.detected)}`;
+  } else {
+    latestAlert.textContent = "Latest alert: waiting for data";
+    latestAlertTitle.textContent = "No alerts yet";
+    latestAlertDetails.textContent = "Trigger a test pod or wait for runtime activity to see the pipeline in motion.";
+  }
+}
+
+async function loadDashboard() {
   try {
-    const response = await fetch("/api/alerts", { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`fetch failed: ${response.status}`);
+    const [healthResponse, alertsResponse] = await Promise.all([
+      fetch("/healthz", { cache: "no-store" }),
+      fetch("/api/alerts", { cache: "no-store" }),
+    ]);
+
+    if (!healthResponse.ok) {
+      throw new Error(`health check failed: ${healthResponse.status}`);
     }
-    const alerts = await response.json();
+    if (!alertsResponse.ok) {
+      throw new Error(`alerts fetch failed: ${alertsResponse.status}`);
+    }
+    const alerts = await alertsResponse.json();
+    apiStatus.textContent = "API: healthy";
+    apiStatus.className = "status-chip live";
     renderCounters(alerts);
+    renderSnapshot(alerts);
     renderAlerts(alerts);
     lastUpdated.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
   } catch (error) {
+    apiStatus.textContent = "API: degraded";
+    apiStatus.className = "status-chip warn";
     lastUpdated.textContent = `Dashboard error: ${error.message}`;
   }
 }
 
-loadAlerts();
-setInterval(loadAlerts, 5000);
+loadDashboard();
+setInterval(loadDashboard, 5000);

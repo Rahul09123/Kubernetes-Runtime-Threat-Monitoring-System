@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>KRTMS Threat Monitor</title>
+    <title>KRTMS Monitoring Console</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -14,8 +14,14 @@
     <main class="layout">
       <header class="hero">
         <p class="eyebrow">Kubernetes Runtime Threat Monitoring</p>
-        <h1>Live Threat Console</h1>
-        <p class="subtitle">Real-time feed of analyzer detections delivered by alert-manager.</p>
+        <h1>Monitoring Console</h1>
+        <p class="subtitle">A live view of detections, alert volume, and the most active namespaces and pods.</p>
+
+        <div class="status-strip">
+          <span class="status-chip live" id="apiStatus">API: checking</span>
+          <span class="status-chip accent" id="latestAlert">Latest alert: waiting for data</span>
+          <span class="status-chip mono" id="lastUpdated">Waiting for first sync...</span>
+        </div>
       </header>
 
       <section class="cards">
@@ -34,6 +40,29 @@
         <article class="card medium">
           <p class="label">Medium</p>
           <h2 id="mediumCount">0</h2>
+        </article>
+      </section>
+
+      <section class="snapshot">
+        <article class="snapshot-card">
+          <p class="label">Top Namespace</p>
+          <h3 id="namespaceCount">-</h3>
+          <p class="snapshot-note">Namespace with the most recent alerts.</p>
+        </article>
+        <article class="snapshot-card">
+          <p class="label">Top Category</p>
+          <h3 id="categoryCount">-</h3>
+          <p class="snapshot-note">Most frequent detection category.</p>
+        </article>
+        <article class="snapshot-card">
+          <p class="label">Top Pod</p>
+          <h3 id="podCount">-</h3>
+          <p class="snapshot-note">Pod with the densest alert activity.</p>
+        </article>
+        <article class="snapshot-card wide">
+          <p class="label">Latest Alert</p>
+          <h3 id="latestAlertTitle">No alerts yet</h3>
+          <p class="snapshot-note" id="latestAlertDetails">Trigger a test pod or wait for runtime activity to see the pipeline in motion.</p>
         </article>
       </section>
 
