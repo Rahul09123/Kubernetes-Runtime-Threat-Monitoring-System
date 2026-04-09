@@ -1,0 +1,208 @@
+name: Build, Test, Scan & Deploy
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io/rahul09123
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.51.4
+  K8S_NAMESPACE: krtms
+
+jobs:
+  checkout-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Run Go tests
+        run: go test ./...
+
+  build-images:
+    needs: checkout-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build event-collector image
+        run: |
+          docker build -f deployments/docker/Dockerfile.event-collector \
+            -t ${{ env.REGISTRY }}/event-collector:${{ github.run_number }} .
+
+      - name: Build analyzer image
+        run: |
+          docker build -f deployments/docker/Dockerfile.analyzer \
+            -t ${{ env.REGISTRY }}/analyzer:${{ github.run_number }} .
+
+      - name: Build alert-manager image
+        run: |
+          docker build -f deployments/docker/Dockerfile.alert-manager \
+            -t ${{ env.REGISTRY }}/alert-manager:${{ github.run_number }} .
+
+  scan-images:
+    needs: build-images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build event-collector image
+        run: |
+          docker build -f deployments/docker/Dockerfile.event-collector \
+            -t ${{ env.REGISTRY }}/event-collector:${{ github.run_number }} .
+
+      - name: Build analyzer image
+        run: |
+          docker build -f deployments/docker/Dockerfile.analyzer \
+            -t ${{ env.REGISTRY }}/analyzer:${{ github.run_number }} .
+
+      - name: Build alert-manager image
+        run: |
+          docker build -f deployments/docker/Dockerfile.alert-manager \
+            -t ${{ env.REGISTRY }}/alert-manager:${{ github.run_number }} .
+
+      - name: Scan event-collector with Trivy
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            ${{ env.TRIVY_IMAGE }} image --severity HIGH,CRITICAL --exit-code 1 \
+            ${{ env.REGISTRY }}/event-collector:${{ github.run_number }}
+
+      - name: Scan analyzer with Trivy
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            ${{ env.TRIVY_IMAGE }} image --severity HIGH,CRITICAL --exit-code 1 \
+            ${{ env.REGISTRY }}/analyzer:${{ github.run_number }}
+
+      - name: Scan alert-manager with Trivy
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            ${{ env.TRIVY_IMAGE }} image --severity HIGH,CRITICAL --exit-code 1 \
+            ${{ env.REGISTRY }}/alert-manager:${{ github.run_number }}
+
+  push-images:
+    needs: scan-images
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build event-collector image
+        run: |
+          docker build -f deployments/docker/Dockerfile.event-collector \
+            -t ${{ env.REGISTRY }}/event-collector:${{ github.run_number }} .
+
+      - name: Build analyzer image
+        run: |
+          docker build -f deployments/docker/Dockerfile.analyzer \
+            -t ${{ env.REGISTRY }}/analyzer:${{ github.run_number }} .
+
+      - name: Build alert-manager image
+        run: |
+          docker build -f deployments/docker/Dockerfile.alert-manager \
+            -t ${{ env.REGISTRY }}/alert-manager:${{ github.run_number }} .
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push event-collector image
+        run: docker push ${{ env.REGISTRY }}/event-collector:${{ github.run_number }}
+
+      - name: Push analyzer image
+        run: docker push ${{ env.REGISTRY }}/analyzer:${{ github.run_number }}
+
+      - name: Push alert-manager image
+        run: docker push ${{ env.REGISTRY }}/alert-manager:${{ github.run_number }}
+
+  deploy-kubernetes:
+    needs: push-images
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_DATA: ${{ secrets.K8S_KUBECONFIG }}
+        run: |
+          mkdir -p $HOME/.kube
+          echo "$KUBECONFIG_DATA" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Apply base manifests
+        run: kubectl apply -k deployments/k8s/base
+
+      - name: Apply monitoring manifests
+        run: kubectl apply -k deployments/k8s/monitoring
+
+      - name: Update event-collector image
+        run: |
+          kubectl set image -n ${{ env.K8S_NAMESPACE }} \
+            deploy/event-collector event-collector=${{ env.REGISTRY }}/event-collector:${{ github.run_number }}
+
+      - name: Update analyzer image
+        run: |
+          kubectl set image -n ${{ env.K8S_NAMESPACE }} \
+            deploy/analyzer analyzer=${{ env.REGISTRY }}/analyzer:${{ github.run_number }}
+
+      - name: Update alert-manager image
+        run: |
+          kubectl set image -n ${{ env.K8S_NAMESPACE }} \
+            deploy/alert-manager alert-manager=${{ env.REGISTRY }}/alert-manager:${{ github.run_number }}
+
+      - name: Wait for event-collector rollout
+        run: |
+          kubectl rollout status deploy/event-collector -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+
+      - name: Wait for analyzer rollout
+        run: |
+          kubectl rollout status deploy/analyzer -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+
+      - name: Wait for alert-manager rollout
+        run: |
+          kubectl rollout status deploy/alert-manager -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+
+      - name: Wait for prometheus rollout
+        run: |
+          kubectl rollout status deploy/prometheus -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+
+  smoke-test:
+    needs: deploy-kubernetes
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_DATA: ${{ secrets.K8S_KUBECONFIG }}
+        run: |
+          mkdir -p $HOME/.kube
+          echo "$KUBECONFIG_DATA" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Check kubectl version
+        run: kubectl version --client
+
+      - name: Run smoke test
+        run: NAMESPACE=${{ env.K8S_NAMESPACE }} make smoke
