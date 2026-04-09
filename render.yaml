@@ -1,14 +1,14 @@
 services:
   - type: web
     name: nats
-    runtime: docker
+    runtime: image
     image:
       url: docker.io/library/nats:2.10-alpine
     plan: free
 
   - type: web
     name: event-collector
-    runtime: docker
+    runtime: image
     image:
       url: ghcr.io/rahul09123/event-collector:latest
     plan: free
@@ -21,7 +21,7 @@ services:
 
   - type: web
     name: analyzer
-    runtime: docker
+    runtime: image
     image:
       url: ghcr.io/rahul09123/analyzer:latest
     plan: free
@@ -34,7 +34,7 @@ services:
 
   - type: web
     name: alert-manager
-    runtime: docker
+    runtime: image
     image:
       url: ghcr.io/rahul09123/alert-manager:latest
     plan: free
@@ -47,7 +47,7 @@ services:
 
   - type: web
     name: prometheus
-    runtime: docker
+    runtime: image
     image:
       url: docker.io/prom/prometheus:v2.54.1
     plan: free
