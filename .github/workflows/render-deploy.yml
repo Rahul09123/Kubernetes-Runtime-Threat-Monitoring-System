@@ -1,0 +1,95 @@
+name: Build and Deploy to Render
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/rahul09123
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.51.4
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Run Go tests
+        run: go test ./...
+
+  build-and-push:
+    needs: test
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push event-collector image
+        run: |
+          docker build \
+            -f deployments/docker/Dockerfile.event-collector \
+            -t $REGISTRY/event-collector:${{ github.sha }} \
+            -t $REGISTRY/event-collector:latest \
+            .
+          docker push $REGISTRY/event-collector:${{ github.sha }}
+          docker push $REGISTRY/event-collector:latest
+
+      - name: Build and push analyzer image
+        run: |
+          docker build \
+            -f deployments/docker/Dockerfile.analyzer \
+            -t $REGISTRY/analyzer:${{ github.sha }} \
+            -t $REGISTRY/analyzer:latest \
+            .
+          docker push $REGISTRY/analyzer:${{ github.sha }}
+          docker push $REGISTRY/analyzer:latest
+
+      - name: Build and push alert-manager image
+        run: |
+          docker build \
+            -f deployments/docker/Dockerfile.alert-manager \
+            -t $REGISTRY/alert-manager:${{ github.sha }} \
+            -t $REGISTRY/alert-manager:latest \
+            .
+          docker push $REGISTRY/alert-manager:${{ github.sha }}
+          docker push $REGISTRY/alert-manager:latest
+
+  deploy-render:
+    needs: build-and-push
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy NATS on Render
+        run: curl -fsS -X POST "${{ secrets.RENDER_NATS_DEPLOY_HOOK_URL }}"
+
+      - name: Deploy event-collector on Render
+        run: curl -fsS -X POST "${{ secrets.RENDER_EVENT_COLLECTOR_DEPLOY_HOOK_URL }}"
+
+      - name: Deploy analyzer on Render
+        run: curl -fsS -X POST "${{ secrets.RENDER_ANALYZER_DEPLOY_HOOK_URL }}"
+
+      - name: Deploy alert-manager on Render
+        run: curl -fsS -X POST "${{ secrets.RENDER_ALERT_MANAGER_DEPLOY_HOOK_URL }}"
+
+      - name: Deploy prometheus on Render
+        run: curl -fsS -X POST "${{ secrets.RENDER_PROMETHEUS_DEPLOY_HOOK_URL }}"

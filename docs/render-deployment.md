@@ -1,162 +1,51 @@
-# Render.com Deployment Guide
+# Render.com + GitHub Actions Deployment Guide
 
-Deploy KRTMS to Render.com (free tier) in minutes.
+This repo now uses GitHub Actions to build images and trigger Render deploy hooks.
 
-## 1. Create Render Account
+## 1. Create the Render services once
 
-1. Go to [Render.com](https://render.com)
-2. Click "Get Started"
-3. Sign up with GitHub (recommended)
-4. Authorize GitHub access
+Create your Render services manually in the dashboard and set them to use these image URLs:
 
-## 2. Deploy from GitHub
+- `nats: docker.io/library/nats:2.10-alpine`
+- `event-collector: ghcr.io/rahul09123/event-collector:latest`
+- `analyzer: ghcr.io/rahul09123/analyzer:latest`
+- `alert-manager: ghcr.io/rahul09123/alert-manager:latest`
+- `prometheus: docker.io/prom/prometheus:v2.54.1`
 
-### Option A: Blueprint Deploy (Recommended)
+For the app services, keep `/healthz` as the health check path and the existing `NATS_URL` / `HTTP_ADDR` environment variables.
 
-1. In your GitHub repo root, Render automatically detects `render.yaml`
-2. Go to Render dashboard
-3. Click "New +" → "Blueprint"
-4. Connect your GitHub repo
-5. Select branch: `main`
-6. Click "Apply"
-7. Render auto-deploys all services
+## 2. Add GitHub repository secrets
 
-### Option B: Manual Deploy
+In GitHub, add these Actions secrets:
 
-1. Render dashboard → "New +" → "Web Service"
-2. Connect your GitHub repo
-3. Configure each service:
-   - Image: `ghcr.io/rahul09123/alert-manager` (plus event-collector, analyzer)
-   - Port: `8082` (for alert-manager)
-   - Plan: Free
+- `RENDER_NATS_DEPLOY_HOOK_URL`
+- `RENDER_EVENT_COLLECTOR_DEPLOY_HOOK_URL`
+- `RENDER_ANALYZER_DEPLOY_HOOK_URL`
+- `RENDER_ALERT_MANAGER_DEPLOY_HOOK_URL`
+- `RENDER_PROMETHEUS_DEPLOY_HOOK_URL`
 
-## 3. Get Your Public URL
+Each secret should contain the deploy hook URL from the Render service settings page.
 
-After ~5-10 minutes (first build):
+## 3. Workflow behavior
 
-1. Render dashboard → Your blueprint/project
-2. Click "alert-manager" service
-3. Copy the URL from Service Details
-4. Example: `https://krtms-alert-manager.onrender.com`
+The workflow at [.github/workflows/render-deploy.yml](../.github/workflows/render-deploy.yml) does this:
 
-**Your live monitoring dashboard:**
-```
-https://<your-render-url>
-```
+1. Runs Go tests.
+2. Builds and pushes `latest` and commit-tagged Docker images to GHCR.
+3. Triggers the Render deploy hooks for each service.
 
-## 4. Service Architecture
+That means a push to `main` becomes the deploy signal.
 
-All services deployed on Render:
+## 4. Public URL
 
-| Service | Port | Status | Public? |
-|---------|------|--------|---------|
-| NATS | 4222 | Internal | No |
-| Event Collector | 8080 | Backend | No |
-| Analyzer | 8081 | Backend | No |
-| **Alert Manager** | **8082** | **Frontend** | **Yes ✅** |
-| Prometheus | 9090 | Metrics | No |
+After Render finishes the deploy, open the `alert-manager` service in the Render dashboard and copy its public URL.
 
-## 5. Auto-Deploy on Push
+## 5. Notes on free tier
 
-Render watches your GitHub repo on `main` branch:
+Render free tier limits may prevent all five services from running long term on free instances. If you hit that limit, keep the frontend and required backend services on Render, or move the full stack to another platform.
 
-1. Edit code on your Mac
-2. Commit and push to GitHub
-3. Render detects the push
-4. Auto-redeploys all services (~5 min)
+## 6. Troubleshooting
 
-## 6. View Logs
-
-To troubleshoot:
-
-1. Render dashboard → Your blueprint
-2. Click service name (e.g., "alert-manager")
-3. Click "Logs" tab
-4. Real-time logs appear
-
-## 7. Free Tier Limits
-
-- **Resources:** Shared compute
-- **Storage:** Variable (not pinned)
-- **Bandwidth:** Unlimited
-- **Services:** Up to 3 free web services
-- **Sleep:** Free tier services sleep after 15 min of inactivity (can wake with next request)
-- **Cost:** Free (optional upgrade to Starter+ tier for $7/month)
-
-## 8. Environment Variables
-
-To customize services, add environment variables:
-
-1. Render dashboard → Service → Environment
-2. Add variables:
-   - `NATS_URL=nats://nats:4222`
-   - `LOG_LEVEL=debug`
-   - etc.
-
-## 9. Custom Domain (Optional)
-
-Free tier uses Render's subdomain. To add custom domain:
-
-1. Service details → Custom domains
-2. Add your domain
-3. Update DNS records (Render provides instructions)
-
-## 10. Troubleshooting
-
-### Services not starting
-- **Check Logs:** Service → Logs tab
-- **Common issues:** Image build failure, environment vars missing
-- **Solution:** Review build logs, ensure images are in GHCR
-
-### Alert Manager shows no data
-- **Expected behavior:** There's no Kubernetes cluster on Render, so Event Collector can't watch pods
-- **Workaround:** Use smoke test to generate fake alerts
-- **Real use:** Deploy on actual Kubernetes (e.g., EKS, GKE) for pod monitoring
-
-### Service keeps restarting
-- **Check healthcheck:** Alert Manager expects `/healthz` endpoint to respond
-- **Verify:** Each service has a working health check
-- **Logs:** Check service output for startup errors
-
-### Out of free tier quota
-- **Limit:** 3 free web services (you have 5)
-- **Solution:** Keep only essential services or upgrade to paid tier
-- **Priority:** NATS, Event Collector, Alert Manager (keep these)
-
-## 11. Render Dashboard Tips
-
-- **Logs:** Real-time streaming of service output
-- **Metrics:** CPU, memory usage
-- **Events:** Deployment history and restarts
-- **Shell:** SSH into running service (for debugging)
-
-## 12. What's Different from Local Minikube
-
-| Aspect | Local Minikube | Render |
-|--------|---|---|
-| Kubernetes pods | ✅ Monitored | ❌ Not available (no K8s cluster) |
-| NATS messaging | ✅ Works | ✅ Works |
-| Alert storage | ✅ Works | ✅ Works |
-| Prometheus | ✅ Works | ✅ Works (metrics scraping) |
-| Falco integration | ✅ Possible | ❌ Requires setup |
-
-## 13. Next Steps
-
-1. ✅ Push `main` branch to GitHub
-2. ✅ Render auto-deploys within 5-10 min
-3. ✅ Access your public Alert Manager URL
-4. ✅ Share URL with your team
-
-## 14. Upgrading Beyond Free Tier
-
-If you need more resources:
-
-1. Render dashboard → Service → Plan
-2. Upgrade to Starter ($7/mo) or higher
-3. Gets dedicated resources, no sleep
-
-## Support
-
-- Render docs: https://render.com/docs
-- GitHub integration: https://render.com/docs/github
-- For issues: Check service logs in Render dashboard
+- If deploys do not start, verify the deploy hook secrets are present and correct.
+- If images are missing, confirm the GHCR package names and that the workflow pushed `latest`.
+- If a service fails health checks, inspect the Render logs for that service.
