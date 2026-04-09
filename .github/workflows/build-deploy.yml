@@ -16,10 +16,11 @@ env:
   REGISTRY: ghcr.io/rahul09123
   TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.51.4
   K8S_NAMESPACE: krtms
+  K8S_CONTEXT: minikube
 
 jobs:
   checkout-and-test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,7 +35,7 @@ jobs:
 
   build-images:
     needs: checkout-and-test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -56,7 +57,7 @@ jobs:
 
   scan-images:
     needs: build-images
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -97,7 +98,7 @@ jobs:
   push-images:
     needs: scan-images
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -136,7 +137,7 @@ jobs:
   deploy-kubernetes:
     needs: push-images
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -144,17 +145,27 @@ jobs:
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
 
-      - name: Configure kubeconfig
+      - name: Configure kubeconfig and context
         env:
           KUBECONFIG_DATA: ${{ secrets.K8S_KUBECONFIG }}
         run: |
-          mkdir -p $HOME/.kube
-          echo "$KUBECONFIG_DATA" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-          echo "KUBECONFIG=$HOME/.kube/config" >> "$GITHUB_ENV"
-
-      - name: Validate kubeconfig
-        run: |
+          set -euo pipefail
+          if [ -n "${KUBECONFIG_DATA:-}" ]; then
+            mkdir -p "$HOME/.kube"
+            if echo "$KUBECONFIG_DATA" | base64 --decode > "$HOME/.kube/config" 2>/dev/null \
+              || echo "$KUBECONFIG_DATA" | base64 -d > "$HOME/.kube/config" 2>/dev/null \
+              || echo "$KUBECONFIG_DATA" | base64 -D > "$HOME/.kube/config" 2>/dev/null; then
+              echo "Decoded kubeconfig from K8S_KUBECONFIG secret"
+            else
+              printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
+              echo "Used raw kubeconfig from K8S_KUBECONFIG secret"
+            fi
+            chmod 600 "$HOME/.kube/config"
+            echo "KUBECONFIG=$HOME/.kube/config" >> "$GITHUB_ENV"
+          else
+            echo "K8S_KUBECONFIG is not set; using local runner kubeconfig"
+          fi
+          kubectl config use-context "$K8S_CONTEXT"
           kubectl config current-context
           kubectl config view --minify
 
@@ -198,7 +209,7 @@ jobs:
   smoke-test:
     needs: deploy-kubernetes
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -206,17 +217,27 @@ jobs:
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
 
-      - name: Configure kubeconfig
+      - name: Configure kubeconfig and context
         env:
           KUBECONFIG_DATA: ${{ secrets.K8S_KUBECONFIG }}
         run: |
-          mkdir -p $HOME/.kube
-          echo "$KUBECONFIG_DATA" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-          echo "KUBECONFIG=$HOME/.kube/config" >> "$GITHUB_ENV"
-
-      - name: Validate kubeconfig
-        run: |
+          set -euo pipefail
+          if [ -n "${KUBECONFIG_DATA:-}" ]; then
+            mkdir -p "$HOME/.kube"
+            if echo "$KUBECONFIG_DATA" | base64 --decode > "$HOME/.kube/config" 2>/dev/null \
+              || echo "$KUBECONFIG_DATA" | base64 -d > "$HOME/.kube/config" 2>/dev/null \
+              || echo "$KUBECONFIG_DATA" | base64 -D > "$HOME/.kube/config" 2>/dev/null; then
+              echo "Decoded kubeconfig from K8S_KUBECONFIG secret"
+            else
+              printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
+              echo "Used raw kubeconfig from K8S_KUBECONFIG secret"
+            fi
+            chmod 600 "$HOME/.kube/config"
+            echo "KUBECONFIG=$HOME/.kube/config" >> "$GITHUB_ENV"
+          else
+            echo "K8S_KUBECONFIG is not set; using local runner kubeconfig"
+          fi
+          kubectl config use-context "$K8S_CONTEXT"
           kubectl config current-context
           kubectl config view --minify
 
